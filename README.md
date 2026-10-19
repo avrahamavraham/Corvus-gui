@@ -13,41 +13,29 @@ A small desktop app that puts a form in front of CTRE's [`corvus`](https://v6.do
 - "+ Add" buttons only on lists that can really hold more than one item (motor controllers, setpoints)
 - Save dialog to choose where the `.java` file goes
 - Log box showing everything `corvus` prints, including errors
-- Can be packaged into a single `.exe` that needs no Python install
 
 Output is always Java for now.
 
 ## Requirements
-
-- Windows (the packaged `.exe` is Windows only; the script itself also runs on Mac/Linux with Python)
 - Python 3.9+ with tkinter (included in the standard python.org installer) if you run from source
 - `corvus` from CTRE's [CLI tools download page](https://docs.ctr-electronics.com/cli-tools)
 
 ## Run from source
 
-1. Download `corvus` and put it in the same folder as `corvus_gui.py`.
+1. Download [`corvus`](https://docs.ctr-electronics.com/cli-tools) and put it in the same folder as `corvus_gui.py`.
 2. Run:
 
    ```
-   python corvus_gui.py
+   py corvus_gui.py
+   ```
+   or
+   ```
+   pthon corvus_gui.py
    ```
 
 If `corvus` is somewhere else, click **Browse for corvus...** once. The choice is remembered in `corvus_gui_config.json` next to the program.
 
 `corvus` is looked up in this order: the path you last chose, the packaged bundle, the folder of the program, then your `PATH`.
-
-## Build a single .exe
-
-1. Put `corvus_gui.py`, `build.bat` and `corvus.exe` in one folder.
-2. Double-click `build.bat`.
-3. Your program is `dist\corvus_gui.exe`.
-
-The `.exe` contains Python, the GUI and `corvus`, so other computers need nothing installed. Notes:
-
-- It starts a few seconds slower, because a one-file build unpacks itself each time.
-- Windows SmartScreen or antivirus software may warn about unsigned apps. Choose "More info" > "Run anyway".
-- To use a newer `corvus`, rebuild, or click **Browse for corvus...** in the app.
-- No console window opens, so look at the log box in the app for messages.
 
 ## How to use it
 
@@ -64,7 +52,7 @@ Near the top of `corvus_gui.py`:
 
 | Setting | What it does |
 |---|---|
-| `EXCLUDED_TYPES` | Mechanisms hidden from the dropdown (`swerve` and `swerve-proj` by default) |
+| `EXCLUDED_TYPES` | Mechanisms hidden from the dropdown (`swerve` and `swerve-proj` by default sould both be used from phonix tuner x) |
 | `FIELD_CHOICES` | Fields that become dropdowns, and their options |
 | `REPEATABLE_LISTS` | Lists that get a "+ Add" button |
 | `HIDDEN_FIELDS` | Fields that are not shown (their value is still sent to corvus unchanged) |

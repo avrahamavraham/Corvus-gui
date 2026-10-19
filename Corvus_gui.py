@@ -344,11 +344,8 @@ class JsonForm(ttk.Frame):
         if is_param(data):
             # Parameter entry: show only its value, labelled with the parameter's name.
             # "name" and "type" are passed through to corvus unchanged.
-            text = pretty(data["name"])
-            unit = data.get("units") or data.get("unit")
-            if unit:  # the unit is shown next to the name, not editable
-                text += f" ({unit})"
-            value_getter = self._build(parent, data["value"], data["name"], label=text)
+            # Units are not shown at all (they are still sent to corvus unchanged).
+            value_getter = self._build(parent, data["value"], data["name"], label=pretty(data["name"]))
             return lambda: {**data, "value": value_getter()}
         if key is None:
             frame = parent
@@ -359,15 +356,13 @@ class JsonForm(ttk.Frame):
         for child_key, child_val in data.items():
             # "name" and "type" are fixed: passed to corvus unchanged, not editable.
             # (Only the name of an item you add yourself with "+ Add" can be typed.)
-            # "unit" is shown as read-only text.
+            # "unit" / "units" are not shown at all, but still sent to corvus unchanged.
             locked = child_key in ("type", "unit", "units") or (
                 child_key == "name" and not unlock_name
             )
             if child_key in HIDDEN_FIELDS or (locked and isinstance(child_val, str)):
                 getters[child_key] = lambda v=child_val: v
-                show = child_key in ("unit", "units") or (
-                    child_key == "name" and data is getattr(self, "_root", None)
-                )
+                show = child_key == "name" and data is getattr(self, "_root", None)
                 if show and child_key not in HIDDEN_FIELDS:
                     row = ttk.Frame(frame)
                     row.pack(fill="x", padx=6, pady=2)
@@ -596,4 +591,4 @@ class App(tk.Tk):
 
 
 if __name__ == "__main__":
-    App().mainloop()
+    App().mainloop()    
