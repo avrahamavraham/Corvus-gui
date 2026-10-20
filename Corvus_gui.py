@@ -1,13 +1,16 @@
-"""Corvus GUI - a small tkinter front end for CTRE's `corvus` CLI.
+"""Unofficial Corvus GUI - a small tkinter front end for CTRE's `corvus` CLI.
+
+This is an unofficial community project. It is not maintained, endorsed, or
+supported by CTR Electronics. It does NOT include corvus: download corvus
+yourself from https://docs.ctr-electronics.com/cli-tools
 
 Flow:
-  1. Pick a mechanism type (dropdown, filled from corvus itself).
-  2. The form is built from the JSON template that `corvus json <type>` produces.
-  3. Click Generate -> choose where to save the .java file -> corvus writes it.
+1. Pick a mechanism type (dropdown, filled from corvus itself).
+2. The form is built from the JSON template that `corvus json <type>` produces.
+3. Click Generate -> choose where to save the .java file -> corvus writes it.
 
 corvus is looked up in this order: the path you last chose (saved in
-corvus_gui_config.json), the PyInstaller bundle, next to this script / the .exe,
-then PATH.
+corvus_gui_config.json), the folder next to this script / the .exe, then PATH.
 """
 
 import copy
@@ -20,13 +23,23 @@ import subprocess
 import sys
 import tempfile
 import tkinter as tk
+import webbrowser
 from tkinter import filedialog, messagebox, ttk
+
+APP_TITLE = "Unofficial Corvus GUI"
+DISCLAIMER = (
+    "Unofficial community tool. Not maintained, endorsed, or supported by "
+    "CTR Electronics. corvus is not included; get it from CTRE."
+)
+CORVUS_DOWNLOAD_URL = "https://docs.ctr-electronics.com/cli-tools"
 
 LANGUAGE = "java"  # fixed for now
 DEFAULT_OUT_DIR = os.path.join("src", "main", "java", "frc", "robot", "subsystems")
 FALLBACK_TYPES = ["elevator", "arm", "flywheel", "led", "configs"]  # only if parsing --help fails
+
 # Never shown in the dropdown (swerve is too different; swerve-proj is the swerve project generator)
 EXCLUDED_TYPES = {"json", "swerve", "swerve-proj"}
+
 CORVUS_NAME = "corvus.exe" if os.name == "nt" else "corvus"
 
 # Fields that should be a dropdown instead of a free-text box.
@@ -60,6 +73,7 @@ CONFIG_PATH = os.path.join(app_dir(), "corvus_gui_config.json")
 # --------------------------------------------------------------------------
 # corvus helpers
 # --------------------------------------------------------------------------
+
 def _find_in_dir(folder):
     """Return a corvus executable inside `folder`, or None."""
     exact = os.path.join(folder, CORVUS_NAME)
@@ -99,13 +113,10 @@ def save_corvus_choice(path):
 
 
 def find_corvus():
+    """Saved choice, then the program's own folder, then PATH."""
     saved = load_saved_corvus()
     if saved:
         return saved
-    if hasattr(sys, "_MEIPASS"):  # running from a PyInstaller one-file build
-        found = _find_in_dir(sys._MEIPASS)
-        if found:
-            return found
     found = _find_in_dir(app_dir())
     if found:
         return found
@@ -139,7 +150,7 @@ def parse_mech_values(help_text):
         <MECH>
             Mechanism to generate
             Possible values:
-            - configs:  Generate a device configuration object
+            - configs: Generate a device configuration object
             - elevator: Generate an Elevator subsystem
         <LANG>
     """
@@ -170,13 +181,14 @@ def discover_mechanisms(corvus):
         names = [n for n in parse_mech_values(out) if n not in EXCLUDED_TYPES]
         if names:
             return names, out
-        notes.append(f"> corvus {' '.join(args)}  (exit code {code})\n{out.strip()}")
+        notes.append(f"> corvus {' '.join(args)} (exit code {code})\n{out.strip()}")
     return FALLBACK_TYPES, "\n".join(notes)
 
 
 # --------------------------------------------------------------------------
 # Label / widget helpers
 # --------------------------------------------------------------------------
+
 def pretty(label):
     """'currentLimit' / 'supply_current_limit' -> 'Current Limit' style labels."""
     text = re.sub(r"[_\-]+", " ", str(label))
@@ -215,6 +227,7 @@ def choices_for(key, value):
 # --------------------------------------------------------------------------
 # Dynamic form built from a JSON template
 # --------------------------------------------------------------------------
+
 class JsonForm(ttk.Frame):
     """Scrollable form that mirrors the structure of a JSON object."""
 
@@ -234,12 +247,14 @@ class JsonForm(ttk.Frame):
         self.canvas.configure(yscrollcommand=bar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         bar.pack(side="right", fill="y")
+
         # One global binding, but the handler only acts when the mouse is over this form.
         for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
             self.bind_all(seq, self._on_wheel, add="+")
         self._getter = None
 
     # -- scrolling --------------------------------------------------------
+
     def _pointer_in_form(self, event):
         """True when the mouse pointer is inside the form's on-screen rectangle."""
         try:
@@ -272,6 +287,7 @@ class JsonForm(ttk.Frame):
         return "break"
 
     # -- building ---------------------------------------------------------
+
     def clear(self):
         for child in self.inner.winfo_children():
             child.destroy()
@@ -295,6 +311,7 @@ class JsonForm(ttk.Frame):
             return self._build_dict(parent, value, key, unlock_name)
         if isinstance(value, list):
             return self._build_list(parent, value, key)
+
         row = ttk.Frame(parent)
         row.pack(fill="x", padx=6, pady=2)
         name = label or (pretty(key) if key is not None else "")
@@ -319,14 +336,17 @@ class JsonForm(ttk.Frame):
             var = tk.StringVar(value=str(value))
             ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
             return lambda: self._to_number(var.get(), int, name)
+
         if isinstance(value, float):
             var = tk.StringVar(value=repr(value))
             ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
             return lambda: self._to_number(var.get(), float, name)
+
         if isinstance(value, str):
             var = tk.StringVar(value=value)
             ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
             return var.get
+
         # lists / null / anything else: edit as raw JSON text
         var = tk.StringVar(value=json.dumps(value))
         ttk.Entry(row, textvariable=var).pack(side="left", fill="x", expand=True)
@@ -347,11 +367,13 @@ class JsonForm(ttk.Frame):
             # Units are not shown at all (they are still sent to corvus unchanged).
             value_getter = self._build(parent, data["value"], data["name"], label=pretty(data["name"]))
             return lambda: {**data, "value": value_getter()}
+
         if key is None:
             frame = parent
         else:
             frame = ttk.LabelFrame(parent, text=pretty(key))
             frame.pack(fill="x", padx=6, pady=4)
+
         getters = {}
         for child_key, child_val in data.items():
             # "name" and "type" are fixed: passed to corvus unchanged, not editable.
@@ -369,6 +391,7 @@ class JsonForm(ttk.Frame):
                     ttk.Label(row, text=pretty(child_key), width=28, anchor="w").pack(side="left")
                     ttk.Label(row, text=child_val).pack(side="left")
                 continue
+
             # For {"name": "NeutralMode", "value": ...} style entries, the sibling
             # "name" decides what kind of input "value" gets (e.g. Brake/Coast dropdown).
             choice_key = None
@@ -382,15 +405,16 @@ class JsonForm(ttk.Frame):
         label = pretty(key) if key is not None else "Items"
         frame = ttk.LabelFrame(parent, text=label)
         frame.pack(fill="x", padx=6, pady=4)
+
         if items and all(is_param(item) for item in items):
             # A list of parameters: just one value input per parameter, no add/remove.
             getters = [self._build(frame, item) for item in items]
             return lambda: [get() for get in getters]
+
         holder = ttk.Frame(frame)
         holder.pack(fill="x")
         entries = []  # each entry is [container, getter]
         template = copy.deepcopy(items[-1]) if items else None  # what "Add" copies
-
         repeatable = flat_key(key) in REPEATABLE_LISTS
 
         def add_item(value, title, is_new=False):
@@ -437,26 +461,28 @@ class JsonForm(ttk.Frame):
 # --------------------------------------------------------------------------
 # Main window
 # --------------------------------------------------------------------------
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Corvus GUI - Phoenix 6 mechanism generator")
-        self.geometry("720x720")
+        self.title(f"{APP_TITLE} - Phoenix 6 mechanism generator")
+        self.geometry("720x740")
         self.corvus = find_corvus()
         self.template_text = ""
         self.last_dir = DEFAULT_OUT_DIR if os.path.isdir(DEFAULT_OUT_DIR) else os.getcwd()
         self._build_ui()
-
         if not self.corvus:
-            self.log("corvus not found. Put it next to this program or on your PATH,")
-            self.log("or click 'Browse for corvus...'.")
+            self.log("corvus not found. This app does not include it.")
+            self.log(f"Download corvus from CTRE: {CORVUS_DOWNLOAD_URL}")
+            self.log("Then put it next to this program, or click 'Browse for corvus...'.")
+            self.after(300, self._offer_download)
         else:
             self.log(f"Using corvus: {self.corvus}")
             self.refresh_mechanisms()
 
     def _build_ui(self):
         top = ttk.Frame(self)
-        top.pack(fill="x", padx=8, pady=8)
+        top.pack(fill="x", padx=8, pady=(8, 2))
         ttk.Label(top, text="Mechanism:").pack(side="left")
         self.type_var = tk.StringVar()
         self.type_box = ttk.Combobox(top, textvariable=self.type_var, state="readonly", width=24)
@@ -464,6 +490,13 @@ class App(tk.Tk):
         self.type_box.bind("<<ComboboxSelected>>", lambda e: self.load_template())
         ttk.Button(top, text="Refresh", command=self.refresh_mechanisms).pack(side="left")
         ttk.Button(top, text="Browse for corvus...", command=self.browse_corvus).pack(side="right")
+        ttk.Button(top, text="Get corvus (CTRE)...", command=self.open_download_page).pack(
+            side="right", padx=6
+        )
+
+        ttk.Label(
+            self, text=DISCLAIMER, foreground="gray", wraplength=690, justify="left"
+        ).pack(fill="x", padx=8, pady=(0, 6))
 
         self.form = JsonForm(self)
         self.form.pack(fill="both", expand=True, padx=8)
@@ -478,6 +511,7 @@ class App(tk.Tk):
         self.log_box.pack(fill="x", padx=8, pady=(0, 8))
 
     # -- logging ----------------------------------------------------------
+
     def log(self, text):
         self.log_box.configure(state="normal")
         self.log_box.insert("end", text.rstrip() + "\n")
@@ -493,6 +527,23 @@ class App(tk.Tk):
         self.log("Template JSON copied to the clipboard.")
 
     # -- corvus discovery -------------------------------------------------
+
+    def open_download_page(self):
+        try:
+            webbrowser.open(CORVUS_DOWNLOAD_URL)
+            self.log(f"Opened {CORVUS_DOWNLOAD_URL}")
+        except Exception as e:
+            self.log(f"Could not open the browser ({e}). Go to: {CORVUS_DOWNLOAD_URL}")
+
+    def _offer_download(self):
+        if messagebox.askyesno(
+            APP_TITLE,
+            "corvus was not found.\n\n"
+            "This app does not include corvus. CTR Electronics provides it "
+            "on their CLI Tools page.\n\nOpen that page now?",
+        ):
+            self.open_download_page()
+
     def browse_corvus(self):
         chosen = filedialog.askopenfilename(
             title="Select corvus executable",
@@ -518,6 +569,7 @@ class App(tk.Tk):
 
     def refresh_mechanisms(self):
         if not self.corvus:
+            self.log("corvus not found yet. Use 'Get corvus (CTRE)...' or 'Browse for corvus...'.")
             return
         names, diag = discover_mechanisms(self.corvus)
         if names is FALLBACK_TYPES:
@@ -552,10 +604,11 @@ class App(tk.Tk):
         self.log(f"Loaded '{mech}' template.")
 
     # -- generate ---------------------------------------------------------
+
     def generate(self):
         mech = self.type_var.get()
         if not (self.corvus and mech):
-            messagebox.showerror("Corvus GUI", "Pick a mechanism and make sure corvus is found.")
+            messagebox.showerror(APP_TITLE, "Pick a mechanism and make sure corvus is found.")
             return
         try:
             spec = self.form.get_value()
@@ -584,11 +637,11 @@ class App(tk.Tk):
             self.log(out)
         if code == 0:
             self.log(f"Done: {out_path}")
-            messagebox.showinfo("Corvus GUI", f"Saved:\n{out_path}")
+            messagebox.showinfo(APP_TITLE, f"Saved:\n{out_path}")
         else:
             self.log(f"corvus failed (exit code {code}).")
-            messagebox.showerror("Corvus GUI", "corvus failed - see the log at the bottom.")
+            messagebox.showerror(APP_TITLE, "corvus failed - see the log at the bottom.")
 
 
 if __name__ == "__main__":
-    App().mainloop()    
+    App().mainloop()
